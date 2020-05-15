@@ -12,6 +12,7 @@ from sklearn.base import TransformerMixin
 
 __all__ = ["PersImage"]
 
+
 class PersImage(TransformerMixin):
     """ Initialize a persistence image generator.
 
@@ -25,7 +26,7 @@ class PersImage(TransformerMixin):
     specs : dict
         Parameters for shape of image with respect to diagram domain. This is used if you would like images to have a particular range. Shaped like 
         ::
-        
+
             {
                 "maxBD": float,
                 "minBD": float
@@ -47,13 +48,13 @@ class PersImage(TransformerMixin):
     """
 
     def __init__(
-        self,
-        pixels=(20, 20),
-        spread=None,
-        specs=None,
-        kernel_type="gaussian",
-        weighting_type="linear",
-        verbose=True,
+            self,
+            pixels=(20, 20),
+            spread=None,
+            specs=None,
+            kernel_type="gaussian",
+            weighting_type="linear",
+            verbose=True,
     ):
 
         self.specs = specs
@@ -96,9 +97,9 @@ class PersImage(TransformerMixin):
 
         if not self.specs:
             self.specs = {
-                "maxBD": np.max([np.max(np.vstack((landscape, np.zeros((1, 2))))) 
+                "maxBD": np.max([np.max(np.vstack((landscape, np.zeros((1, 2)))))
                                  for landscape in landscapes] + [0]),
-                "minBD": np.min([np.min(np.vstack((landscape, np.zeros((1, 2))))) 
+                "minBD": np.min([np.min(np.vstack((landscape, np.zeros((1, 2)))))
                                  for landscape in landscapes] + [0]),
             }
         imgs = [self._transform(dgm) for dgm in landscapes]
@@ -141,8 +142,8 @@ class PersImage(TransformerMixin):
         return img
 
     def weighting(self, landscape=None):
-        """ Define a weighting function, 
-                for stability results to hold, the function must be 0 at y=0.    
+        """ Define a weighting function,
+                for stability results to hold, the function must be 0 at y=0.
         """
 
         # TODO: Implement a logistic function
@@ -150,13 +151,13 @@ class PersImage(TransformerMixin):
 
         if landscape is not None:
             if len(landscape) > 0:
-                maxy = np.max(landscape[:, 1])
-            else: 
+                maxy = np.max(landscape[landscape[:, 1] != np.inf, 1])
+            else:
                 maxy = 1
 
         def linear(interval):
             # linear function of y such that f(0) = 0 and f(max(y)) = 1
-            d = interval[1]
+            d = interval[1] if interval[1] != np.inf else maxy
             return (1 / maxy) * d if landscape is not None else d
 
         def pw_linear(interval):
@@ -181,6 +182,7 @@ class PersImage(TransformerMixin):
         """ This will return whatever kind of kernel we want to use.
             Must have signature (ndarray size NxM, ndarray size 1xM) -> ndarray size Nx1
         """
+
         # TODO: use self.kernel_type to choose function
 
         def gaussian(data, pixel):
