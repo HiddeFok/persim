@@ -4,7 +4,7 @@ import collections
 
 import numpy as np
 from scipy.stats import multivariate_normal as mvn
-from scipy.stats import norm
+from scipy.stats import norm, laplace, lognorm, gamma
 import scipy.spatial as spatial
 import matplotlib.pyplot as plt
 
@@ -24,7 +24,7 @@ class PersImage(TransformerMixin):
     spread : float
         Standard deviation of gaussian kernel
     specs : dict
-        Parameters for shape of image with respect to diagram domain. This is used if you would like images to have a particular range. Shaped like 
+        Parameters for shape of image with respect to diagram domain. This is used if you would like images to have a particular range. Shaped like
         ::
 
             {
@@ -130,11 +130,14 @@ class PersImage(TransformerMixin):
 
         # Implement this as a `summed-area table` - it'll be way faster
         spread = self.spread if self.spread else dx
+
+        cdf = self._kern_cdf()
+
         for point in landscape:
-            x_smooth = norm.cdf(xs_upper, point[0], spread) - norm.cdf(
+            x_smooth = cdf(xs_upper, point[0], spread) - cdf(
                 xs_lower, point[0], spread
             )
-            y_smooth = norm.cdf(ys_upper, point[1], spread) - norm.cdf(
+            y_smooth = cdf(ys_upper, point[1], spread) - cdf(
                 ys_lower, point[1], spread
             )
             img += np.outer(x_smooth, y_smooth) * weighting(point)
@@ -155,28 +158,49 @@ class PersImage(TransformerMixin):
             else:
                 maxy = 1
 
-        def linear(interval):
-            # linear function of y such that f(0) = 0 and f(max(y)) = 1
-            d = interval[1] if interval[1] != np.inf else maxy
-            return (1 / maxy) * d if landscape is not None else d
+        if self.weighting_type == "linear":
+            def linear(interval):
+                # linear function of y such that f(0) = 0 and f(max(y)) = 1
+                d = interval[1] if interval[1] != np.inf else maxy
+                return (1 / maxy) * d if landscape is not None else d
 
-        def pw_linear(interval):
-            """ This is the function defined as w_b(t) in the original PI paper
+            return linear
+        elif self.weighting_type == "pw_linear":
+            def pw_linear(interval):
+                """ This is the function defined as w_b(t) in the original PI paper
 
-                Take b to be maxy/self.ny to effectively zero out the bottom pixel row
-            """
+                    Take b to be maxy/self.ny to effectively zero out the bottom pixel row
+                """
 
-            t = interval[1]
-            b = maxy / self.ny
+                t = interval[1] if interval[1] != np.inf else maxy
+                b = maxy / self.ny
 
-            if t <= 0:
-                return 0
-            if 0 < t < b:
-                return t / b
-            if b <= t:
-                return 1
+                if t <= 0:
+                    return 0
+                if 0 < t < b:
+                    return t / b
+                if b <= t:
+                    return 1
 
-        return linear
+            return pw_linear
+        elif self.weighting_type == "logistic":
+            def logistic(interval):
+                # Logistic weighting function
+                t = interval[1]
+                x_0 = np.mean(landscape[landscape[:, 1] != np.inf, 1])
+                return 1 / (1 + np.exp(-1 * (t - x_0)))
+
+            return logistic
+
+    def _kern_cdf(self):
+        if self.kernel_type == "gaussian":
+            return norm.cdf
+        elif self.kernel_type == "laplace":
+            return laplace.cdf
+        elif self.kernel_type == "lognorm":
+            return lognorm.cdf
+        elif self.kernel_type == "gamma":
+            return gamma.cdf
 
     def kernel(self, spread=1):
         """ This will return whatever kind of kernel we want to use.
@@ -184,7 +208,6 @@ class PersImage(TransformerMixin):
         """
 
         # TODO: use self.kernel_type to choose function
-
         def gaussian(data, pixel):
             return mvn.pdf(data, mean=pixel, cov=spread)
 
