@@ -92,7 +92,7 @@ class PersImage(TransformerMixin):
         if singular:
             diagrams = [diagrams]
 
-        dgs = [np.copy(diagram, np.float64) for diagram in diagrams]
+        dgs = [np.copy(diagram) for diagram in diagrams]
         landscapes = [PersImage.to_landscape(dg) for dg in dgs]
 
         if not self.specs:
@@ -133,12 +133,18 @@ class PersImage(TransformerMixin):
 
         cdf = self._kern_cdf()
 
+        # we can't fill in zeros when using these cdfs
+        if self.kernel_type in ["gamma", "lognorm"]:
+            epsilon = 0.0000001
+        else:
+            epsilon = 0
+
         for point in landscape:
-            x_smooth = cdf(xs_upper, point[0], spread) - cdf(
-                xs_lower, point[0], spread
+            x_smooth = cdf(xs_upper, point[0] + epsilon, spread) - cdf(
+                xs_lower, point[0] + epsilon, spread
             )
-            y_smooth = cdf(ys_upper, point[1], spread) - cdf(
-                ys_lower, point[1], spread
+            y_smooth = cdf(ys_upper, point[1] + epsilon, spread) - cdf(
+                ys_lower, point[1] + epsilon, spread
             )
             img += np.outer(x_smooth, y_smooth) * weighting(point)
         img = img.T[::-1]
@@ -188,6 +194,7 @@ class PersImage(TransformerMixin):
                 # Logistic weighting function
                 t = interval[1]
                 x_0 = np.mean(landscape[landscape[:, 1] != np.inf, 1])
+                print(1 / (1 + np.exp(-1 * (t - x_0))))
                 return 1 / (1 + np.exp(-1 * (t - x_0)))
 
             return logistic
